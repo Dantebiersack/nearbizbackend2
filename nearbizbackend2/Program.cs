@@ -1,4 +1,3 @@
-// using Npgsql;  // no es obligatorio importar nada aquí
 using Microsoft.EntityFrameworkCore;
 using nearbizbackend.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -7,22 +6,25 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ====== JWT CONFIG ======
 var jwtSection = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSection["Key"]);
+var key = Encoding.UTF8.GetBytes(jwtSection["Key"] ?? "DEFAULT_DEV_KEY");
 
-// EF Core -> Postgres (Supabase)
+// ====== EF CORE (Postgres / Supabase) ======
 builder.Services.AddDbContext<NearBizDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Opcional: comportamiento legacy de timestamps (si trabajas con DateTime sin zona)
+// Permitir comportamiento legacy de timestamps (opcional)
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+// ====== CORS ======
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 });
 
+// ====== AUTENTICACIÓN JWT ======
 builder.Services
     .AddAuthentication(options =>
     {
@@ -43,9 +45,10 @@ builder.Services
             ClockSkew = TimeSpan.Zero
         };
     });
+
 builder.Services.AddAuthorization();
 
-// OJO: ya no dupliques esta línea (en tu archivo está dos veces)
+// ====== CONTROLLERS ======
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = null;
@@ -54,13 +57,15 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// ====== BUILD APP ======
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// --- Endpoint raíz para probar la API ---
+app.MapGet("/", () => Results.Ok("NearBiz API online"));
+
+// --- Swagger SIEMPRE activo (útil en Render) ---
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors("AllowAll");
 

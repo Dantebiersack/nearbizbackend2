@@ -42,13 +42,12 @@ namespace nearbizbackend.Data
                 e.Property(x => x.Email).HasMaxLength(100).IsRequired();
 
                 // Si puedes, evita caracteres no ASCII en nombres físicos:
-                // e.Property(x => x.ContrasenaHash).HasColumnName("contrasena_hash").HasMaxLength(255).IsRequired();
                 e.Property(x => x.ContrasenaHash).HasColumnName("contrasena_hash").HasMaxLength(255).IsRequired();
 
                 // GETDATE() -> now()
                 e.Property(x => x.FechaRegistro).HasDefaultValueSql("now()");
                 e.Property(x => x.Estado).HasDefaultValue(true);
-                e.Property(x => x.Token).HasColumnName("token");
+                e.Property(x => x.Token).HasColumnName("token").HasMaxLength(255);
                 e.HasOne(x => x.Rol).WithMany().HasForeignKey(x => x.IdRol).OnDelete(DeleteBehavior.Restrict);
             });
 

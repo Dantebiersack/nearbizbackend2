@@ -62,8 +62,8 @@ namespace nearbizbackend.Controllers
                 var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
 
                 // 5) Guardar token (opcional)
-                //user.Token = token;
-                //await _db.SaveChangesAsync();
+                user.Token = token;
+                await _db.SaveChangesAsync();
 
                 return Ok(new LoginResponse(
                     token, jwt.ValidTo, user.Nombre, user.IdUsuario, rolNombre, user.Email));

@@ -15,9 +15,18 @@ var key = Encoding.UTF8.GetBytes(keyString);
 
 // ========= EF Core (Postgres / Supabase) =========
 builder.Services.AddDbContext<NearBizDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-       .EnableDetailedErrors()
-       .EnableSensitiveDataLogging()); // quítalo en prod si no quieres logs detallados
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), npg =>
+    {
+        npg.CommandTimeout(60);            
+        npg.EnableRetryOnFailure(3,        
+            TimeSpan.FromSeconds(5),
+            errorCodesToAdd: null);
+    })
+    .EnableDetailedErrors()
+    // quítalo en prod si no quieres logs verbosos
+    .EnableSensitiveDataLogging()
+);
+
 
 // Opcional compat de timestamps
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);

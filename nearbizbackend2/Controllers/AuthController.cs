@@ -38,10 +38,11 @@ namespace nearbizbackend.Controllers
 
                 // 1) Buscar usuario
                 var user = await _db.Usuarios
+                    .AsNoTracking()
                     .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(u =>
-                        (u.Email == req.UserOrEmail || u.Nombre == req.UserOrEmail) &&
-                        u.Estado == true);
+                        u.Estado && (u.Email == req.UserOrEmail || u.Nombre == req.UserOrEmail));
+
 
                 if (user is null)
                     return Unauthorized(new { message = "Usuario o contraseña inválidos" });
@@ -61,8 +62,8 @@ namespace nearbizbackend.Controllers
                 var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
 
                 // 5) Guardar token (opcional)
-                user.Token = token;
-                await _db.SaveChangesAsync();
+                //user.Token = token;
+                //await _db.SaveChangesAsync();
 
                 return Ok(new LoginResponse(
                     token, jwt.ValidTo, user.Nombre, user.IdUsuario, rolNombre, user.Email));

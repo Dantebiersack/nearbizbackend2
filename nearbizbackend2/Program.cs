@@ -94,6 +94,20 @@ app.MapGet("/api/health/net", async () =>
     }
 });
 
+app.MapGet("/api/health/db", async (NearBizDbContext db) =>
+{
+    try
+    {
+        var ok = await db.Database.CanConnectAsync();
+        return Results.Ok(new { canConnect = ok });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message, statusCode: 500);
+    }
+});
+
+
 
 // --- Swagger SIEMPRE activo (útil en Render) ---
 app.UseSwagger();

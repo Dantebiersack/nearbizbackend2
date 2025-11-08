@@ -77,7 +77,7 @@ app.MapGet("/api/health/net", async () =>
         {
             try
             {
-                using var tcp = new TcpClient(AddressFamily.InterNetwork); // IPv4
+                using var tcp = new TcpClient(AddressFamily.InterNetwork);
                 await tcp.ConnectAsync(ip, sb.Port);
                 return Results.Ok(new { host = sb.Host, ip = ip.ToString(), ok = true });
             }

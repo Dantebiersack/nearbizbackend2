@@ -2,56 +2,59 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using nearbizbackend.Data;
-using Npgsql;
-using System.Net;
-using System.Net.Sockets;
+using nearbizbackend.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ====== JWT CONFIG ======
+// ========= JWT =========
 var jwtSection = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSection["Key"] ?? "DEFAULT_DEV_KEY");
+var keyString = jwtSection["Key"]
+    ?? throw new InvalidOperationException("Missing Jwt:Key (configura Jwt__Key en variables de entorno).");
+var key = Encoding.UTF8.GetBytes(keyString);
 
-// ====== EF CORE (Postgres / Supabase) ======
+// ========= EF Core (Postgres / Supabase) =========
 builder.Services.AddDbContext<NearBizDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+       .EnableDetailedErrors()
+       .EnableSensitiveDataLogging()); // quítalo en prod si no quieres logs detallados
 
-// Permitir comportamiento legacy de timestamps (opcional)
+// Opcional compat de timestamps
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-// ====== CORS ======
+// ========= CORS =========
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+    options.AddPolicy("AllowAll", p => p
+        .AllowAnyOrigin()
+        .AllowAnyHeader()
+        .AllowAnyMethod());
 });
 
-// ====== AUTENTICACIÓN JWT ======
-builder.Services
-    .AddAuthentication(options =>
+// ========= Auth / JWT =========
+builder.Services.AddAuthentication(o =>
+{
+    o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    o.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(o =>
+{
+    o.TokenValidationParameters = new TokenValidationParameters
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateIssuerSigningKey = true,
-            ValidateLifetime = true,
-            ValidIssuer = jwtSection["Issuer"],
-            ValidAudience = jwtSection["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(key),
-            ClockSkew = TimeSpan.Zero
-        };
-    });
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateIssuerSigningKey = true,
+        ValidateLifetime = true,
+        ValidIssuer = jwtSection["Issuer"],
+        ValidAudience = jwtSection["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
 builder.Services.AddAuthorization();
 
-// ====== CONTROLLERS ======
+// ========= Controllers / Swagger =========
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = null;
@@ -60,46 +63,18 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ====== BUILD APP ======
 var app = builder.Build();
 
-// --- Endpoint raíz para probar la API ---
+// ========= Endpoints de health / ping =========
 app.MapGet("/", () => Results.Ok("NearBiz API online"));
-
-app.MapGet("/api/health/net", async () =>
-{
-    try
-    {
-        var cs = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-        var sb = new NpgsqlConnectionStringBuilder(cs);
-        var addrs = await Dns.GetHostAddressesAsync(sb.Host);
-        foreach (var ip in addrs)
-        {
-            try
-            {
-                using var tcp = new TcpClient(AddressFamily.InterNetwork);
-                await tcp.ConnectAsync(ip, sb.Port);
-                return Results.Ok(new { host = sb.Host, ip = ip.ToString(), ok = true });
-            }
-            catch (Exception ex)
-            {
-                // sigue probando la siguiente IP
-            }
-        }
-        return Results.Problem($"No pude conectar a {sb.Host}:{sb.Port} por IPv4/IPv6.");
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(ex.ToString());
-    }
-});
 
 app.MapGet("/api/health/db", async (NearBizDbContext db) =>
 {
     try
     {
         var ok = await db.Database.CanConnectAsync();
-        return Results.Ok(new { canConnect = ok });
+        var n = await db.Set<Usuario>().CountAsync();
+        return Results.Ok(new { canConnect = ok, usuarios = n });
     }
     catch (Exception ex)
     {
@@ -107,14 +82,21 @@ app.MapGet("/api/health/db", async (NearBizDbContext db) =>
     }
 });
 
+app.MapGet("/api/health/jwt", (IConfiguration cfg) =>
+{
+    var jwt = cfg.GetSection("Jwt");
+    var hasKey = !string.IsNullOrWhiteSpace(jwt["Key"]);
+    return Results.Ok(new { hasKey, issuer = jwt["Issuer"], audience = jwt["Audience"] });
+});
 
-
-// --- Swagger SIEMPRE activo (útil en Render) ---
+// ========= Middlewares (orden correcto para Render) =========
+// NO usar app.UseHttpsRedirection() en Render (el proxy ya maneja HTTPS)
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseCors("AllowAll");
+app.UseCors("AllowAll");     // CORS antes de Auth
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 app.Run();

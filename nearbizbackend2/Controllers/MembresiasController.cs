@@ -18,7 +18,13 @@ namespace nearbizbackend2.Controllers
         {
             var q = includeInactive ? _db.Membresias.IgnoreQueryFilters() : _db.Membresias;
             var items = await q.AsNoTracking()
-                .Select(m => new MembresiaReadDto(m.IdMembresia, m.PrecioMensual, m.IdNegocio, m.Estado))
+                .Select(m => new MembresiaReadDto(
+                    m.IdMembresia,
+                    m.PrecioMensual,
+                    m.IdNegocio,
+                    m.Estado,
+                    m.UltimaRenovacion
+                ))
                 .ToListAsync();
             return Ok(items);
         }
@@ -26,28 +32,56 @@ namespace nearbizbackend2.Controllers
         [HttpGet("{id:int}")]
         public async Task<ActionResult<MembresiaReadDto>> Get(int id)
         {
-            var m = await _db.Membresias.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.IdMembresia == id);
+            var m = await _db.Membresias.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(x => x.IdMembresia == id);
             if (m is null) return NotFound();
-            return Ok(new MembresiaReadDto(m.IdMembresia, m.PrecioMensual, m.IdNegocio, m.Estado));
+
+            return Ok(new MembresiaReadDto(
+                m.IdMembresia,
+                m.PrecioMensual,
+                m.IdNegocio,
+                m.Estado,
+                m.UltimaRenovacion
+            ));
         }
 
         [HttpPost]
         public async Task<ActionResult<MembresiaReadDto>> Create(MembresiaCreateDto dto)
         {
-            var e = new Membresia { PrecioMensual = dto.PrecioMensual, IdNegocio = dto.IdNegocio, Estado = true };
+            var e = new Membresia
+            {
+                PrecioMensual = dto.PrecioMensual,
+                IdNegocio = dto.IdNegocio,
+                Estado = true,
+                UltimaRenovacion = dto.UltimaRenovacion ?? DateTime.UtcNow 
+            };
+
             _db.Membresias.Add(e);
             await _db.SaveChangesAsync();
+
             return CreatedAtAction(nameof(Get), new { id = e.IdMembresia },
-                new MembresiaReadDto(e.IdMembresia, e.PrecioMensual, e.IdNegocio, e.Estado));
+                new MembresiaReadDto(
+                    e.IdMembresia,
+                    e.PrecioMensual,
+                    e.IdNegocio,
+                    e.Estado,
+                    e.UltimaRenovacion
+                ));
         }
 
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, MembresiaUpdateDto dto)
         {
-            var e = await _db.Membresias.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.IdMembresia == id);
+            var e = await _db.Membresias.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(x => x.IdMembresia == id);
             if (e is null) return NotFound();
+
             e.PrecioMensual = dto.PrecioMensual;
             e.IdNegocio = dto.IdNegocio;
+
+            if (dto.UltimaRenovacion.HasValue)
+                e.UltimaRenovacion = dto.UltimaRenovacion.Value;
+
             await _db.SaveChangesAsync();
             return NoContent();
         }
@@ -55,8 +89,10 @@ namespace nearbizbackend2.Controllers
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> SoftDelete(int id)
         {
-            var e = await _db.Membresias.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.IdMembresia == id);
+            var e = await _db.Membresias.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(x => x.IdMembresia == id);
             if (e is null) return NotFound();
+
             e.Estado = false;
             await _db.SaveChangesAsync();
             return NoContent();
@@ -65,10 +101,27 @@ namespace nearbizbackend2.Controllers
         [HttpPatch("{id:int}/restore")]
         public async Task<IActionResult> Restore(int id)
         {
-            var e = await _db.Membresias.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.IdMembresia == id);
+            var e = await _db.Membresias.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(x => x.IdMembresia == id);
             if (e is null) return NotFound();
+
             e.Estado = true;
             await _db.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // NUEVO: renovar (marca fecha de última renovación en UTC y activa si estaba inactiva)
+        [HttpPatch("{id:int}/renew")]
+        public async Task<IActionResult> Renew(int id)
+        {
+            var e = await _db.Membresias.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(x => x.IdMembresia == id);
+            if (e is null) return NotFound();
+
+            e.UltimaRenovacion = DateTime.UtcNow;
+            e.Estado = true;
+            await _db.SaveChangesAsync();
+
             return NoContent();
         }
 
@@ -85,14 +138,14 @@ namespace nearbizbackend2.Controllers
                       (m, n) => new MembresiaAdminRowDto(
                           m.IdMembresia,
                           m.IdNegocio,
-                          n.Nombre,       
+                          n.Nombre,
                           m.PrecioMensual,
-                          m.Estado
+                          m.Estado,
+                          m.UltimaRenovacion 
                       ))
                 .ToListAsync();
 
             return Ok(rows);
         }
-
     }
 }

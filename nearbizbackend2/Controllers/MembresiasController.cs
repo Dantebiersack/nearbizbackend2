@@ -71,5 +71,28 @@ namespace nearbizbackend2.Controllers
             await _db.SaveChangesAsync();
             return NoContent();
         }
+
+        [HttpGet("admin")]
+        public async Task<ActionResult<IEnumerable<MembresiaAdminRowDto>>> GetGrid([FromQuery] bool includeInactive = true)
+        {
+            var mset = includeInactive ? _db.Membresias.IgnoreQueryFilters() : _db.Membresias;
+            var nset = includeInactive ? _db.Negocios.IgnoreQueryFilters() : _db.Negocios;
+
+            var rows = await mset.AsNoTracking()
+                .Join(nset.AsNoTracking(),
+                      m => m.IdNegocio,
+                      n => n.IdNegocio,
+                      (m, n) => new MembresiaAdminRowDto(
+                          m.IdMembresia,
+                          m.IdNegocio,
+                          n.Nombre,       
+                          m.PrecioMensual,
+                          m.Estado
+                      ))
+                .ToListAsync();
+
+            return Ok(rows);
+        }
+
     }
 }

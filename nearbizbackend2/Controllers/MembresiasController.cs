@@ -147,5 +147,43 @@ namespace nearbizbackend2.Controllers
 
             return Ok(rows);
         }
+
+        public record MembresiaCreateForBusinessDto(decimal? PrecioMensual);
+
+        [HttpPost("create-for-business/{idNegocio:int}")]
+        public async Task<ActionResult<MembresiaReadDto>> CreateForBusiness(int idNegocio, MembresiaCreateForBusinessDto dto)
+        {
+            // 1) Validar que exista el negocio
+            var negocio = await _db.Negocios.IgnoreQueryFilters()
+                            .FirstOrDefaultAsync(n => n.IdNegocio == idNegocio);
+            if (negocio is null)
+                return NotFound(new { message = "Negocio no encontrado" });
+
+            // 2) Validar que NO tenga membresía (suponiendo 1 a 1)
+            var yaTiene = await _db.Membresias.IgnoreQueryFilters()
+                            .AnyAsync(m => m.IdNegocio == idNegocio);
+            if (yaTiene)
+                return Conflict(new { message = "El negocio ya tiene membresía" });
+
+            // 3) Crear
+            var e = new Membresia
+            {
+                IdNegocio = idNegocio,
+                PrecioMensual = dto.PrecioMensual ?? 0m,
+                Estado = true,
+                UltimaRenovacion = DateTime.UtcNow, 
+            };
+            _db.Membresias.Add(e);
+            await _db.SaveChangesAsync();
+
+            return Ok(new MembresiaReadDto(
+                e.IdMembresia,
+                e.PrecioMensual,
+                e.IdNegocio,
+                e.Estado,
+                e.UltimaRenovacion
+            ));
+        }
+
     }
 }
